@@ -1,0 +1,10 @@
+feat: complete MVP of College Canteen POS
+
+- Fully functional offline POS with SQLite
+- Menu management + cart system
+- Hold/Resume orders
+- Thermal receipt printing (console + real printer ready)
+- Reports & Settings panels
+- Keyboard shortcuts (F1/F2/F3)
+- Searchable menu
+- Ready for PyInstaller packaging"
