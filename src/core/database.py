@@ -124,3 +124,89 @@ def delete_held_order(order_id):
     cursor.execute("DELETE FROM orders WHERE order_id = ?", (order_id,))
     conn.commit()
     conn.close()
+
+def get_all_orders():
+    """Get all completed orders."""
+    import json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT order_id, date_time, total_amount, items_json 
+        FROM orders 
+        WHERE status = 'completed' 
+        ORDER BY date_time DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    orders = []
+    for row in rows:
+        items = json.loads(row[3])
+        orders.append({
+            'id': row[0],
+            'datetime': row[1],
+            'total': row[2],
+            'items': items
+        })
+    return orders
+
+def get_daily_summary():
+    """Get today's sales summary."""
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*), SUM(total_amount) 
+        FROM orders 
+        WHERE status = 'completed' 
+        AND date_time LIKE ?
+    """, (f"{today}%",))
+    count, total = cursor.fetchone()
+    conn.close()
+    return count or 0, total or 0.0
+
+def get_most_sold_items(limit=5):
+    """Get top N most sold items by quantity."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT items_json 
+        FROM orders 
+        WHERE status = 'completed'
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    from collections import defaultdict
+    item_sales = defaultdict(int)
+    import json
+    for row in rows:
+        items = json.loads(row[0])
+        for item in items:
+            key = (item['name'], item['price'])
+            item_sales[key] += item['qty']
+
+    # Sort by quantity sold
+    sorted_items = sorted(item_sales.items(), key=lambda x: x[1], reverse=True)
+    return sorted_items[:limit]
+
+def get_setting(name, default=None):
+    """Get a setting value from DB."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM settings WHERE name = ?", (name,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else default
+
+def set_setting(name, value):
+    """Save a setting to DB."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO settings (name, value) VALUES (?, ?)",
+        (name, value)
+    )
+    conn.commit()
+    conn.close()

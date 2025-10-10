@@ -2,10 +2,11 @@
 import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QScrollArea, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QSpinBox, QAbstractItemView
+    QPushButton, QLabel, QScrollArea, QTableWidget,
+    QTableWidgetItem, QSpinBox, QMessageBox,
+    QAbstractItemView, QLineEdit  # 👈 Add QLineEdit if not present
 )
+from PyQt6.QtGui import QShortcut, QFont,QKeySequence  # 👈 QShortcut is here!
 from PyQt6.QtCore import Qt
 from .resume_dialog import ResumeDialog
 from ..core.database import get_db_connection, save_held_order, get_held_orders, delete_held_order
@@ -28,6 +29,12 @@ class MainWindow(QMainWindow):
         self.menu_layout = QVBoxLayout(self.menu_widget)
         self.menu_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.menu_area.setWidget(self.menu_widget)
+
+        # Search bar
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("🔍 Search items...")
+        self.search_bar.textChanged.connect(self.filter_menu_items)
+        self.menu_layout.insertWidget(0, self.search_bar)
 
         # Right: Cart panel
         self.cart_panel = QWidget()
@@ -81,6 +88,16 @@ class MainWindow(QMainWindow):
         cancel_btn.clicked.connect(self.clear_cart)  # Cancel = clear cart
         print_btn.clicked.connect(self.print_bill)
         clear_btn.clicked.connect(self.clear_cart)
+
+        # Keyboard shortcuts
+        self.hold_shortcut = QShortcut(QKeySequence("F1"), self)
+        self.hold_shortcut.activated.connect(self.hold_order)
+
+        self.resume_shortcut = QShortcut(QKeySequence("F2"), self)
+        self.resume_shortcut.activated.connect(self.resume_order)
+
+        self.print_shortcut = QShortcut(QKeySequence("F3"), self)
+        self.print_shortcut.activated.connect(self.print_bill)
 
     def load_menu_items(self):
         """Load items from DB and create buttons."""
@@ -218,20 +235,36 @@ class MainWindow(QMainWindow):
         self.update_cart_display()
 
     def clear_cart(self):
-        """Empty the cart."""
+        """Empty the cart. If it's a resumed held order, ask whether to delete it."""
         if self.current_held_id is not None:
-            from PyQt6.QtWidgets import QMessageBox
-            reply = QMessageBox.question(
-                self, "Clear Resumed Order?",
-                "This cart came from a held order. Clearing will lose changes.\nAre you sure?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.No:
-                return
+            from PyQt6.QtWidgets import QMessageBox, QDialogButtonBox
 
-        self.cart_items.clear()
-        self.current_held_id = None
-        self.update_cart_display()
+            # Create custom dialog with "Delete" and "Keep" buttons
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Clear Resumed Order")
+            msg.setText(f"This cart came from held order H{self.current_held_id:03}.")
+            msg.setInformativeText("Do you want to delete this held order from history?")
+
+            delete_btn = msg.addButton("Delete", QMessageBox.ButtonRole.YesRole)
+            keep_btn = msg.addButton("Keep", QMessageBox.ButtonRole.NoRole)
+            msg.setDefaultButton(keep_btn)
+
+            msg.exec()
+
+            clicked_btn = msg.clickedButton()
+            if clicked_btn == delete_btn:
+                # Delete the held order
+                from ..core.database import delete_held_order
+                delete_held_order(self.current_held_id)
+
+            # Always clear cart and reset
+            self.cart_items.clear()
+            self.current_held_id = None
+            self.update_cart_display()
+        else:
+            # Normal clear (not a resumed order)
+            self.cart_items.clear()
+            self.update_cart_display()
 
     def print_bill(self):
         """Print receipt and save order."""
@@ -359,9 +392,9 @@ class MainWindow(QMainWindow):
 
     def resume_order(self):
         """Show dialog to resume a held order (without deleting it yet)."""
-        held_orders = get_held_orders()
+        from PyQt6.QtWidgets import QMessageBox
+        held_orders = get_held_orders()  # Always get the latest list
         if not held_orders:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, "No Held Orders", "No orders are currently held.")
             return
 
@@ -380,3 +413,15 @@ class MainWindow(QMainWindow):
                     'qty': item['qty']
                 }
             self.update_cart_display()
+
+    def filter_menu_items(self, text):
+        """Filter menu buttons by search text."""
+        text = text.lower()
+        for i in range(self.menu_widget.layout().count()):
+            widget = self.menu_widget.layout().itemAt(i).widget()
+            if widget and isinstance(widget, QWidget):
+                # Check if it's a row widget
+                for child in widget.findChildren(QPushButton):
+                    visible = text in child.text().lower()
+                    widget.setVisible(visible)
+                    break

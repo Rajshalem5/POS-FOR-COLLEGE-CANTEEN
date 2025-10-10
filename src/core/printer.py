@@ -16,19 +16,26 @@ def print_receipt(cart_items, subtotal, tax, total):
     p = get_printer()
     
     try:
-        # Get canteen name
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM settings WHERE name = 'canteen_name'")
-        result = cursor.fetchone()
-        canteen_name = result[0] if result else "COLLEGE CANTEEN"
-        conn.close()
+        # Get canteen name and tax percent from settings
+        from .database import get_setting
+        import os
+        canteen_name = get_setting("canteen_name", "SVG FOOD COURT")
+        tax_percent = float(get_setting("tax_percent", "5.0"))
 
         # Header
         p.set(align='center', bold=True)
         p.text(canteen_name + "\n")
         p.set(align='center', bold=False)
         p.text("-" * 32 + "\n")
+
+        # Optional: Print logo (if file exists)
+        logo_path = os.path.join(os.path.dirname(__file__), "..", "resources", "logo.png")
+        if os.path.exists(logo_path):
+            try:
+                p.image(logo_path)
+                p.text("\n")
+            except Exception as e:
+                print(f"⚠️ Logo print failed: {e}")
 
         # Items
         p.set(align='left')
@@ -43,7 +50,7 @@ def print_receipt(cart_items, subtotal, tax, total):
 
         # Totals
         p.text(f"Subtotal:          ₹{subtotal:>6.2f}\n")
-        p.text(f"Tax (5%):          ₹{tax:>6.2f}\n")
+        p.text(f"Tax ({tax_percent:.0f}%):          ₹{tax:>6.2f}\n")
         p.text(f"Total:             ₹{total:>6.2f}\n")
 
         # Footer

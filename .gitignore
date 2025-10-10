@@ -1,0 +1,20 @@
+# Virtual environment
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Build outputs
+build/
+dist/
+*.spec
+
+# Database (optional: you may want to keep sample DB)
+canteen.db
+sales_report.csv
+
+# OS files
+.DS_Store
+Thumbs.db
