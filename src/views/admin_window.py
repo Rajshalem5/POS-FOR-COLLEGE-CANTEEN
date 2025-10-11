@@ -2,11 +2,30 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QMessageBox,
-    QComboBox, QTabWidget, QHeaderView, QWidget
+    QComboBox, QTabWidget, QHeaderView, QWidget, QItemDelegate
 )
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QIntValidator
 import csv
 import os
 from ..core.database import get_db_connection, get_all_orders, get_daily_summary, get_most_sold_items, get_setting, set_setting
+
+class StockEditor(QItemDelegate):
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setValidator(QIntValidator(0, 9999, editor))
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, Qt.ItemDataRole.EditRole)
+        editor.setText(str(value))
+
+    def setModelData(self, editor, model, index):
+        value = int(editor.text())
+        model.setData(index, value, Qt.ItemDataRole.EditRole)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
 
 class AdminWindow(QDialog):
     def __init__(self):
@@ -67,6 +86,10 @@ class AdminWindow(QDialog):
         self.table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price", "Stock"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(self.table.SelectionBehavior.SelectRows)
+        # Make stock column editable
+        self.table.setItemDelegateForColumn(4, StockEditor())
+        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
+        self.table.cellChanged.connect(self.on_cell_changed)
 
         delete_btn = QPushButton("Delete Selected")
         delete_btn.clicked.connect(self.delete_item)
@@ -182,11 +205,16 @@ class AdminWindow(QDialog):
         self.price_input.clear()
         self.stock_input.setText("999")
         self.load_items()
+        # Refresh main window menu (if exists)
+        if hasattr(self.parent(), 'load_menu_items'):
+            self.parent().load_menu_items()
+        if hasattr(self.parent(), 'refresh_menu'):
+            self.parent().refresh_menu()
 
     def load_items(self):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, category, price, stock_quantity FROM items ORDER BY name")  # ← added stock
+        cursor.execute("SELECT id, name, category, price, stock_quantity FROM items ORDER BY name")
         items = cursor.fetchall()
         conn.close()
 
@@ -196,7 +224,8 @@ class AdminWindow(QDialog):
             self.table.setItem(row, 1, QTableWidgetItem(name))
             self.table.setItem(row, 2, QTableWidgetItem(category))
             self.table.setItem(row, 3, QTableWidgetItem(f"{price:.2f}"))
-            self.table.setItem(row, 4, QTableWidgetItem(str(stock)))  # ← stock column
+            self.table.setItem(row, 4, QTableWidgetItem(str(stock)))
+        # (Optional) Connect cellChanged for advanced editing
 
     def delete_item(self):
         selected = self.table.currentRow()
@@ -217,6 +246,10 @@ class AdminWindow(QDialog):
             conn.commit()
             conn.close()
             self.load_items()
+            if hasattr(self.parent(), 'load_menu_items'):
+                self.parent().load_menu_items()
+            if hasattr(self.parent(), 'refresh_menu'):
+                self.parent().refresh_menu()
 
     def setup_settings_tab(self, parent):
         layout = QVBoxLayout(parent)

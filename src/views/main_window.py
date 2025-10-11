@@ -564,3 +564,7 @@ class MainWindow(QMainWindow):
                     visible = text in child.text().lower()
                     widget.setVisible(visible)
                     break
+
+    def refresh_menu(self):
+        """Refresh menu buttons from DB."""
+        self.load_menu_items()

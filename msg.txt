@@ -1,10 +1,7 @@
-feat: complete MVP of College Canteen POS
+feat(inventory): implement stock tracking to prevent overselling
 
-- Fully functional offline POS with SQLite
-- Menu management + cart system
-- Hold/Resume orders
-- Thermal receipt printing (console + real printer ready)
-- Reports & Settings panels
-- Keyboard shortcuts (F1/F2/F3)
-- Searchable menu
-- Ready for PyInstaller packaging"
+- Add stock_quantity column to items table
+- Menu buttons: gray (out of stock), orange (low stock), green (normal)
+- Auto-reduce stock when adding to cart
+- Admin panel: edit stock per item
+- Unlimited stock = 999"
