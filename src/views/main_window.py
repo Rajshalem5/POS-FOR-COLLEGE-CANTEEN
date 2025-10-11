@@ -59,6 +59,23 @@ class MainWindow(QMainWindow):
         self.cart_layout.addWidget(self.tax_label)
         self.cart_layout.addWidget(self.total_label)
 
+        # Cash handling fields
+        self.cash_label = QLabel("💰 Cash Received:")
+        self.cash_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        self.cash_input = QLineEdit()
+        self.cash_input.setPlaceholderText("Enter cash amount (e.g., 100)")
+        self.cash_input.setFixedHeight(40)
+        self.cash_input.setStyleSheet("font-size: 16px; padding: 5px;")
+        self.cash_input.textChanged.connect(self.update_change_due)
+
+        self.change_label = QLabel("🔄 Change Due: ₹0.00")
+        self.change_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
+
+        # Add to cart layout (before action buttons)
+        self.cart_layout.addWidget(self.cash_label)
+        self.cart_layout.addWidget(self.cash_input)
+        self.cart_layout.addWidget(self.change_label)
+
         # Action buttons
         btn_layout = QHBoxLayout()
         hold_btn = QPushButton("⏸️ Hold Order")
@@ -266,22 +283,85 @@ class MainWindow(QMainWindow):
             self.cart_items.clear()
             self.update_cart_display()
 
+    def update_change_due(self):
+        """Calculate and display change due."""
+        try:
+            # Get cash input
+            cash_text = self.cash_input.text().strip()
+            if not cash_text:
+                self.change_label.setText("🔄 Change Due: ₹0.00")
+                self.change_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
+                return
+
+            cash = float(cash_text)
+            
+            # Get total from label (parse "Total: ₹78.75")
+            total_text = self.total_label.text()
+            total = float(total_text.split("₹")[-1])
+            
+            # Calculate change
+            change = cash - total
+            
+            # Update label
+            self.change_label.setText(f"🔄 Change Due: ₹{change:.2f}")
+            
+            # Color code: green (ok) / red (insufficient)
+            if change >= 0:
+                self.change_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
+            else:
+                self.change_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #f44336;")
+                
+        except ValueError:
+            self.change_label.setText("🔄 Change Due: ₹0.00")
+            self.change_label.setStyleSheet("font-weight: bold; font-size: 16px; color: #4CAF50;")
+
     def print_bill(self):
-        """Print receipt and save order."""
+        """Print receipt with cash handling."""
         if not self.cart_items:
-            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Empty Cart", "Cart is empty. Add items first.")
             return
 
+        # Validate cash input
+        try:
+            cash_text = self.cash_input.text().strip()
+            if not cash_text:
+                QMessageBox.warning(self, "Cash Required", "Please enter cash received amount.")
+                return
+                
+            cash = float(cash_text)
+            total_text = self.total_label.text()
+            total = float(total_text.split("₹")[-1])
+            
+            if cash < total:
+                QMessageBox.warning(
+                    self, 
+                    "Insufficient Cash", 
+                    f"Cash received (₹{cash:.2f}) is less than total (₹{total:.2f})!\n"
+                    f"Need at least ₹{total:.2f}."
+                )
+                return
+                
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Cash", "Please enter a valid cash amount (e.g., 100).")
+            return
+
+        # Calculate totals
         subtotal = sum(data['price'] * data['qty'] for data in self.cart_items.values())
-        tax_percent = 5.0
+        from ..core.database import get_setting
+        tax_percent = float(get_setting("tax_percent", "5.0"))
         tax = subtotal * (tax_percent / 100)
         total = subtotal + tax
 
+        # Print receipt (pass cash amount)
         from ..core.printer import print_receipt
-        print_receipt(self.cart_items, subtotal, tax, total)
+        print_receipt(self.cart_items, subtotal, tax, total, cash_received=cash)
 
+        # Save order
         self.save_order()
+
+        # Reset cash fields
+        self.cash_input.clear()
+        self.change_label.setText("🔄 Change Due: ₹0.00")
 
         # Delete held order if this was a resumed one
         if self.current_held_id is not None:

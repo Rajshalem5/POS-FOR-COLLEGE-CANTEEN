@@ -11,7 +11,7 @@ def get_printer():
     print("✅ Using Dummy printer (printing to console only)")
     return Dummy()
 
-def print_receipt(cart_items, subtotal, tax, total):
+def print_receipt(cart_items, subtotal, tax, total, cash_received=0.0):
     """Print formatted receipt to console."""
     p = get_printer()
     
@@ -52,6 +52,12 @@ def print_receipt(cart_items, subtotal, tax, total):
         p.text(f"Subtotal:          ₹{subtotal:>6.2f}\n")
         p.text(f"Tax ({tax_percent:.0f}%):          ₹{tax:>6.2f}\n")
         p.text(f"Total:             ₹{total:>6.2f}\n")
+
+        # Cash handling section
+        if cash_received > 0:
+            p.text("-" * 32 + "\n")
+            p.text(f"Cash:              ₹{cash_received:>6.2f}\n")
+            p.text(f"Change:            ₹{cash_received - total:>6.2f}\n")
 
         # Footer
         p.text("-" * 32 + "\n")
