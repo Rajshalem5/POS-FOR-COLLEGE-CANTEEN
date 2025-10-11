@@ -117,7 +117,7 @@ class MainWindow(QMainWindow):
         self.print_shortcut.activated.connect(self.print_bill)
 
     def load_menu_items(self):
-        """Load items from DB and create buttons."""
+        """Load items from DB and create buttons (unlimited stock)."""
         while self.menu_layout.count():
             child = self.menu_layout.takeAt(0)
             if child.widget():
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, price, stock_quantity FROM items WHERE available = 1 ORDER BY name")
+        cursor.execute("SELECT id, name, price FROM items WHERE available = 1 ORDER BY name")  # ← 3 columns only
         items = cursor.fetchall()
         conn.close()
 
@@ -134,63 +134,31 @@ class MainWindow(QMainWindow):
             return
 
         row_widget = None
-        for i, (item_id, name, price, stock) in enumerate(items):  # ← added stock
+        for i, (item_id, name, price) in enumerate(items):  # ← 3 values only
             if i % 2 == 0:
                 row_widget = QWidget()
                 row_layout = QHBoxLayout(row_widget)
                 self.menu_layout.addWidget(row_widget)
-            
             btn = QPushButton(f"{name}\n₹{price:.2f}")
             btn.setFixedSize(220, 90)
-            
-            # Stock logic
-            if stock <= 0:
-                # Out of stock
-                btn.setEnabled(False)
-                btn.setStyleSheet("""
-                    QPushButton {
-                        font-size: 16px;
-                        background-color: #cccccc;
-                        color: #666666;
-                        border: none;
-                        border-radius: 8px;
-                    }
-                """)
-            elif stock <= 5:
-                # Low stock
-                btn.setStyleSheet("""
-                    QPushButton {
-                        font-size: 16px;
-                        background-color: #ff9800;  /* Orange */
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                    }
-                    QPushButton:hover {
-                        background-color: #f57c00;
-                    }
-                """)
-            else:
-                # Normal stock
-                btn.setStyleSheet("""
-                    QPushButton {
-                        font-size: 16px;
-                        background-color: #4CAF50;
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                    }
-                    QPushButton:hover {
-                        background-color: #45a049;
-                    }
-                """)
-            
-            btn.clicked.connect(lambda iid=item_id, n=name, p=price, s=stock: self.add_to_cart(iid, n, p, s))
+            btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 16px;
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
+            btn.clicked.connect(lambda iid=item_id, n=name, p=price: self.add_to_cart(iid, n, p))
             row_layout.addWidget(btn)
 
         # Add Admin button at bottom
         admin_btn = QPushButton("⚙️ Admin Panel")
-        admin_btn.setFixedSize(200, 50)
+        admin_btn.setFixedSize(220, 50)
         admin_btn.setStyleSheet("""
             QPushButton {
                 font-size: 14px;
@@ -205,11 +173,6 @@ class MainWindow(QMainWindow):
 
     def add_to_cart(self, item_id, name, price, current_stock):
         """Add item to cart and reduce stock."""
-        # Check if in stock
-        if current_stock <= 0:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Out of Stock", f"Sorry, {name} is out of stock!")
-            return
 
         key = (name, price)
         if key in self.cart_items:

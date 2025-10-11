@@ -2,30 +2,13 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QMessageBox,
-    QComboBox, QTabWidget, QHeaderView, QWidget, QItemDelegate
+    QComboBox, QTabWidget, QHeaderView, QWidget
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIntValidator
 import csv
 import os
 from ..core.database import get_db_connection, get_all_orders, get_daily_summary, get_most_sold_items, get_setting, set_setting
-
-class StockEditor(QItemDelegate):
-    def createEditor(self, parent, option, index):
-        editor = QLineEdit(parent)
-        editor.setValidator(QIntValidator(0, 9999, editor))
-        return editor
-
-    def setEditorData(self, editor, index):
-        value = index.model().data(index, Qt.ItemDataRole.EditRole)
-        editor.setText(str(value))
-
-    def setModelData(self, editor, model, index):
-        value = int(editor.text())
-        model.setData(index, value, Qt.ItemDataRole.EditRole)
-
-    def updateEditorGeometry(self, editor, option, index):
-        editor.setGeometry(option.rect)
 
 class AdminWindow(QDialog):
     def __init__(self):
@@ -65,9 +48,6 @@ class AdminWindow(QDialog):
         self.price_input.setPlaceholderText("Price (e.g., 25.0)")
         self.category_input = QComboBox()
         self.category_input.addItems(["Snacks", "Drinks", "Meals", "Other"])
-        self.stock_input = QLineEdit()
-        self.stock_input.setPlaceholderText("Stock (999=unlimited)")
-        self.stock_input.setText("999")
         add_btn = QPushButton("Add Item")
         add_btn.clicked.connect(self.add_item)
 
@@ -77,19 +57,13 @@ class AdminWindow(QDialog):
         form_layout.addWidget(self.price_input)
         form_layout.addWidget(QLabel("Category:"))
         form_layout.addWidget(self.category_input)
-        form_layout.addWidget(QLabel("Stock:"))
-        form_layout.addWidget(self.stock_input)
         form_layout.addWidget(add_btn)
 
         # Table to show/edit items
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price", "Stock"])
+        self.table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(self.table.SelectionBehavior.SelectRows)
-        # Make stock column editable
-        self.table.setItemDelegateForColumn(4, StockEditor())
-        self.table.setEditTriggers(QTableWidget.EditTrigger.DoubleClicked)
-        self.table.cellChanged.connect(self.on_cell_changed)
 
         delete_btn = QPushButton("Delete Selected")
         delete_btn.clicked.connect(self.delete_item)
@@ -186,24 +160,17 @@ class AdminWindow(QDialog):
             QMessageBox.warning(self, "Input Error", "Price must be a number.")
             return
 
-        try:
-            stock = int(self.stock_input.text() or 999)
-        except ValueError:
-            QMessageBox.warning(self, "Input Error", "Stock must be a number.")
-            return
-
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO items (name, category, price, stock_quantity) VALUES (?, ?, ?, ?)",
-            (name, category, price, stock)
+            "INSERT INTO items (name, category, price) VALUES (?, ?, ?)",
+            (name, category, price)
         )
         conn.commit()
         conn.close()
 
         self.name_input.clear()
         self.price_input.clear()
-        self.stock_input.setText("999")
         self.load_items()
         # Refresh main window menu (if exists)
         if hasattr(self.parent(), 'load_menu_items'):
@@ -214,17 +181,16 @@ class AdminWindow(QDialog):
     def load_items(self):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, category, price, stock_quantity FROM items ORDER BY name")
+        cursor.execute("SELECT id, name, category, price FROM items ORDER BY name")
         items = cursor.fetchall()
         conn.close()
 
         self.table.setRowCount(len(items))
-        for row, (id, name, category, price, stock) in enumerate(items):
+        for row, (id, name, category, price) in enumerate(items):
             self.table.setItem(row, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row, 1, QTableWidgetItem(name))
             self.table.setItem(row, 2, QTableWidgetItem(category))
             self.table.setItem(row, 3, QTableWidgetItem(f"{price:.2f}"))
-            self.table.setItem(row, 4, QTableWidgetItem(str(stock)))
         # (Optional) Connect cellChanged for advanced editing
 
     def delete_item(self):
@@ -315,26 +281,3 @@ class AdminWindow(QDialog):
             QMessageBox.warning(self, "Input Error", f"Invalid tax value: {e}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
-
-    def on_cell_changed(self, row, column):
-        """Handle stock cell changes."""
-        if column == 4:  # Stock column
-            try:
-                item_id = int(self.table.item(row, 0).text())
-                new_stock_text = self.table.item(row, 4).text()
-                new_stock = int(new_stock_text)
-                
-                from ..core.database import get_db_connection
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("UPDATE items SET stock_quantity = ? WHERE id = ?", (new_stock, item_id))
-                conn.commit()
-                conn.close()
-                
-                # Refresh main menu if parent exists
-                if self.parent() and hasattr(self.parent(), 'refresh_menu'):
-                    self.parent().refresh_menu()
-                    
-            except (ValueError, AttributeError) as e:
-                # Handle invalid input or missing items
-                pass
