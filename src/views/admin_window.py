@@ -315,3 +315,26 @@ class AdminWindow(QDialog):
             QMessageBox.warning(self, "Input Error", f"Invalid tax value: {e}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save settings: {e}")
+
+    def on_cell_changed(self, row, column):
+        """Handle stock cell changes."""
+        if column == 4:  # Stock column
+            try:
+                item_id = int(self.table.item(row, 0).text())
+                new_stock_text = self.table.item(row, 4).text()
+                new_stock = int(new_stock_text)
+                
+                from ..core.database import get_db_connection
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE items SET stock_quantity = ? WHERE id = ?", (new_stock, item_id))
+                conn.commit()
+                conn.close()
+                
+                # Refresh main menu if parent exists
+                if self.parent() and hasattr(self.parent(), 'refresh_menu'):
+                    self.parent().refresh_menu()
+                    
+            except (ValueError, AttributeError) as e:
+                # Handle invalid input or missing items
+                pass
