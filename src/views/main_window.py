@@ -471,9 +471,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Hold Failed", "Failed to hold order.")
 
     def resume_order(self):
-        """Show dialog to resume a held order (without deleting it yet)."""
+        """Show dialog to resume a held order."""
         from PyQt6.QtWidgets import QMessageBox
-        held_orders = get_held_orders()  # Always get the latest list
+        held_orders, deleted_count = get_held_orders()  # ← Now returns count
+        
+        # Show notification if old orders were cleaned
+        if deleted_count > 0:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, 
+                "Held Orders Cleaned", 
+                f"{deleted_count} old held order(s) (>2 hours) automatically deleted."
+            )
+        
         if not held_orders:
             QMessageBox.information(self, "No Held Orders", "No orders are currently held.")
             return
@@ -481,7 +491,6 @@ class MainWindow(QMainWindow):
         dialog = ResumeDialog(held_orders)
         if dialog.exec():
             selected_order = held_orders[dialog.selected_order]
-            # Store current held order ID for later
             self.current_held_id = selected_order['id']
             # Rebuild cart
             self.cart_items = {}

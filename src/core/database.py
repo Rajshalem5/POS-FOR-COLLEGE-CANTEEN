@@ -96,10 +96,20 @@ def save_held_order(cart_items):
     return order_id
 
 def get_held_orders():
-    """Get all held orders."""
+    """Get all held orders + auto-delete old ones."""
     import json
+    from datetime import datetime, timedelta
+
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Auto-delete held orders older than 2 hours
+    cutoff_time = (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("DELETE FROM orders WHERE status = 'held' AND date_time < ?", (cutoff_time,))
+    deleted_count = cursor.rowcount
+    conn.commit()
+    
+    # Fetch remaining held orders
     cursor.execute("SELECT order_id, date_time, items_json FROM orders WHERE status = 'held' ORDER BY date_time")
     rows = cursor.fetchall()
     conn.close()
@@ -115,7 +125,8 @@ def get_held_orders():
             'summary': summary,
             'items': items
         })
-    return held_orders
+    
+    return held_orders, deleted_count
 
 def delete_held_order(order_id):
     """Delete a held order (after resuming)."""

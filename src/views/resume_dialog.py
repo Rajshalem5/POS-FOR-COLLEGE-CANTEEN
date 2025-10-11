@@ -36,6 +36,12 @@ class ResumeDialog(QDialog):
         top_btn_layout.addWidget(resume_btn)
         top_btn_layout.addWidget(delete_selected_btn)
         top_btn_layout.addWidget(delete_all_btn)
+
+        # Manual cleanup button
+        cleanup_btn = QPushButton("🧹 Clear Old Held Orders")
+        cleanup_btn.clicked.connect(self.cleanup_old_orders)
+        top_btn_layout.addWidget(cleanup_btn)
+
         layout.addLayout(top_btn_layout)
 
         # "Select All" checkbox
@@ -137,3 +143,43 @@ class ResumeDialog(QDialog):
             self.list_widget.clear()
             self.checkboxes.clear()
             self.select_all_checkbox.setChecked(False)
+
+    def cleanup_old_orders(self):
+        """Manually delete held orders older than 2 hours."""
+        from datetime import datetime, timedelta
+        from ..core.database import get_db_connection
+        
+        cutoff_time = (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM orders WHERE status = 'held' AND date_time < ?", (cutoff_time,))
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        if deleted_count > 0:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, 
+                "Cleanup Complete", 
+                f"{deleted_count} old held order(s) deleted."
+            )
+            # Refresh the list
+            from ..core.database import get_held_orders
+            held_orders, _ = get_held_orders()
+            self.held_orders = held_orders
+            self.list_widget.clear()
+            self.checkboxes.clear()
+            for order in held_orders:
+                item = QListWidgetItem()
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
+                display_text = f"H{order['id']:03} • {order['time'][11:16]} • {order['summary']}"
+                item.setText(display_text)
+                self.list_widget.addItem(item)
+                self.checkboxes.append(item)
+            self.select_all_checkbox.setChecked(False)
+        else:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "No Old Orders", "No held orders older than 2 hours.")
