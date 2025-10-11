@@ -11,11 +11,11 @@ def get_db_connection():
     return conn
 
 def init_db():
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist + handle schema migrations."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Items table
+    # Items table (original, no stock_quantity)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +26,12 @@ def init_db():
         )
     ''')
 
+    # Check if stock_quantity column exists, add if missing
+    cursor.execute("PRAGMA table_info(items)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "stock_quantity" not in columns:
+        cursor.execute("ALTER TABLE items ADD COLUMN stock_quantity INTEGER DEFAULT 999")
+
     # Settings table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
@@ -34,7 +40,7 @@ def init_db():
         )
     ''')
 
-    # Orders table (for future)
+    # Orders table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             order_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,13 +62,13 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM items")
     if cursor.fetchone()[0] == 0:
         sample_items = [
-            ("Tea", "Drinks", 10.0),
-            ("Coffee", "Drinks", 15.0),
-            ("Sandwich", "Snacks", 30.0),
-            ("Biscuit", "Snacks", 5.0),
+            ("Tea", "Drinks", 10.0, 50),
+            ("Coffee", "Drinks", 15.0, 30),
+            ("Sandwich", "Snacks", 30.0, 20),
+            ("Biscuit", "Snacks", 5.0, 100),
         ]
         cursor.executemany(
-            "INSERT INTO items (name, category, price) VALUES (?, ?, ?)",
+            "INSERT INTO items (name, category, price, stock_quantity) VALUES (?, ?, ?, ?)",
             sample_items
         )
 

@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, price FROM items WHERE available = 1 ORDER BY name")
+        cursor.execute("SELECT id, name, price, stock_quantity FROM items WHERE available = 1 ORDER BY name")
         items = cursor.fetchall()
         conn.close()
 
@@ -134,26 +134,58 @@ class MainWindow(QMainWindow):
             return
 
         row_widget = None
-        for i, (item_id, name, price) in enumerate(items):
+        for i, (item_id, name, price, stock) in enumerate(items):  # ← added stock
             if i % 2 == 0:
                 row_widget = QWidget()
                 row_layout = QHBoxLayout(row_widget)
                 self.menu_layout.addWidget(row_widget)
+            
             btn = QPushButton(f"{name}\n₹{price:.2f}")
-            btn.setFixedSize(200, 80)
-            btn.setStyleSheet("""
-                QPushButton {
-                    font-size: 16px;
-                    background-color: #4CAF50;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                }
-                QPushButton:hover {
-                    background-color: #45a049;
-                }
-            """)
-            btn.clicked.connect(lambda iid=item_id, n=name, p=price: self.add_to_cart(iid, n, p))
+            btn.setFixedSize(220, 90)
+            
+            # Stock logic
+            if stock <= 0:
+                # Out of stock
+                btn.setEnabled(False)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        font-size: 16px;
+                        background-color: #cccccc;
+                        color: #666666;
+                        border: none;
+                        border-radius: 8px;
+                    }
+                """)
+            elif stock <= 5:
+                # Low stock
+                btn.setStyleSheet("""
+                    QPushButton {
+                        font-size: 16px;
+                        background-color: #ff9800;  /* Orange */
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                    }
+                    QPushButton:hover {
+                        background-color: #f57c00;
+                    }
+                """)
+            else:
+                # Normal stock
+                btn.setStyleSheet("""
+                    QPushButton {
+                        font-size: 16px;
+                        background-color: #4CAF50;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                    }
+                    QPushButton:hover {
+                        background-color: #45a049;
+                    }
+                """)
+            
+            btn.clicked.connect(lambda iid=item_id, n=name, p=price, s=stock: self.add_to_cart(iid, n, p, s))
             row_layout.addWidget(btn)
 
         # Add Admin button at bottom
@@ -171,14 +203,32 @@ class MainWindow(QMainWindow):
         admin_btn.clicked.connect(self.open_admin_panel)
         self.menu_layout.addWidget(admin_btn)
 
-    def add_to_cart(self, item_id, name, price):
-        """Add item to cart or increase quantity."""
-        key = (name, price)  # Use (name, price) as unique key
+    def add_to_cart(self, item_id, name, price, current_stock):
+        """Add item to cart and reduce stock."""
+        # Check if in stock
+        if current_stock <= 0:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Out of Stock", f"Sorry, {name} is out of stock!")
+            return
+
+        key = (name, price)
         if key in self.cart_items:
             self.cart_items[key]['qty'] += 1
         else:
             self.cart_items[key] = {'name': name, 'price': price, 'qty': 1}
+        
+        # Reduce stock in DB (if not unlimited)
+        if current_stock < 999:  # 999 = unlimited
+            from ..core.database import get_db_connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE items SET stock_quantity = stock_quantity - 1 WHERE id = ?", (item_id,))
+            conn.commit()
+            conn.close()
+        
         self.update_cart_display()
+        # Refresh menu to update stock colors
+        self.load_menu_items()
 
     def update_cart_display(self):
         """Refresh cart table and totals."""

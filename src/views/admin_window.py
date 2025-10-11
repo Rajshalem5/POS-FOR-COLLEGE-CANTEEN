@@ -46,6 +46,9 @@ class AdminWindow(QDialog):
         self.price_input.setPlaceholderText("Price (e.g., 25.0)")
         self.category_input = QComboBox()
         self.category_input.addItems(["Snacks", "Drinks", "Meals", "Other"])
+        self.stock_input = QLineEdit()
+        self.stock_input.setPlaceholderText("Stock (999=unlimited)")
+        self.stock_input.setText("999")
         add_btn = QPushButton("Add Item")
         add_btn.clicked.connect(self.add_item)
 
@@ -55,11 +58,13 @@ class AdminWindow(QDialog):
         form_layout.addWidget(self.price_input)
         form_layout.addWidget(QLabel("Category:"))
         form_layout.addWidget(self.category_input)
+        form_layout.addWidget(QLabel("Stock:"))
+        form_layout.addWidget(self.stock_input)
         form_layout.addWidget(add_btn)
 
         # Table to show/edit items
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price"])
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels(["ID", "Name", "Category", "Price", "Stock"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setSelectionBehavior(self.table.SelectionBehavior.SelectRows)
 
@@ -158,32 +163,40 @@ class AdminWindow(QDialog):
             QMessageBox.warning(self, "Input Error", "Price must be a number.")
             return
 
+        try:
+            stock = int(self.stock_input.text() or 999)
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Stock must be a number.")
+            return
+
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO items (name, category, price) VALUES (?, ?, ?)",
-            (name, category, price)
+            "INSERT INTO items (name, category, price, stock_quantity) VALUES (?, ?, ?, ?)",
+            (name, category, price, stock)
         )
         conn.commit()
         conn.close()
 
         self.name_input.clear()
         self.price_input.clear()
+        self.stock_input.setText("999")
         self.load_items()
 
     def load_items(self):
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, category, price FROM items ORDER BY name")
+        cursor.execute("SELECT id, name, category, price, stock_quantity FROM items ORDER BY name")  # ← added stock
         items = cursor.fetchall()
         conn.close()
 
         self.table.setRowCount(len(items))
-        for row, (id, name, category, price) in enumerate(items):
+        for row, (id, name, category, price, stock) in enumerate(items):
             self.table.setItem(row, 0, QTableWidgetItem(str(id)))
             self.table.setItem(row, 1, QTableWidgetItem(name))
             self.table.setItem(row, 2, QTableWidgetItem(category))
             self.table.setItem(row, 3, QTableWidgetItem(f"{price:.2f}"))
+            self.table.setItem(row, 4, QTableWidgetItem(str(stock)))  # ← stock column
 
     def delete_item(self):
         selected = self.table.currentRow()
