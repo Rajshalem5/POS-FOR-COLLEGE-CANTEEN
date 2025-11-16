@@ -2,6 +2,8 @@
 ⚡ Fast, offline Point-of-Sale system for college canteens built with PyQt6 and SQLite. Real-time billing, thermal printing, and inventory management for Windows.
 
 
+ https://chatgpt.com/share/691a158b-fd08-8010-add7-2fc9fb4796cb
+
 
 ## 🤝 Contributing
 
